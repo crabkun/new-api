@@ -61,6 +61,35 @@ func getAndValidateTextRequest(c *gin.Context, relayInfo *relaycommon.RelayInfo)
 		}
 	}
 	relayInfo.IsStream = textRequest.Stream
+
+	{
+		id := c.GetInt("id")
+		user, err := model.GetUserById(id, true)
+		if err != nil {
+			goto next
+		}
+		if user.Rolling > 0 && len(textRequest.Messages) > user.Rolling {
+			isSystem := textRequest.Messages[0].Role == "system"
+			first := textRequest.Messages[0]
+			src := len(textRequest.Messages)
+			pos := src - user.Rolling
+			textRequest.Messages = textRequest.Messages[pos:]
+			if isSystem {
+				tmp := make([]dto.Message, 0, len(textRequest.Messages)+1)
+				tmp = append(tmp, first)
+				tmp = append(tmp, textRequest.Messages...)
+				textRequest.Messages = tmp
+			}
+			isAssistant := false
+			if textRequest.Messages[0].Role == "assistant" {
+				isAssistant = true
+				textRequest.Messages = textRequest.Messages[1:]
+			}
+			common.LogInfo(c, fmt.Sprintf("cut: %s[%d][%v][%v],from %d,to %d.", user.DisplayName, user.Id, isSystem, isAssistant, src, len(textRequest.Messages)))
+		}
+	}
+
+next:
 	return textRequest, nil
 }
 
